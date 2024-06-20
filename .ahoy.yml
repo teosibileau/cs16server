@@ -5,3 +5,8 @@ commands:
     usage: A series of docker commands (experimental)
     imports:
       - .ahoy/docker.ahoy.yml
+
+  do:
+    usage: Digital Ocean commands
+    imports:
+      - .ahoy/do.ahoy.yml
