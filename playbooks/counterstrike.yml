@@ -1,0 +1,27 @@
+---
+- hosts: all
+  vars:
+    docker_install_compose: true
+    docker_compose_version: "v2.27.1"
+    docker_compose_arch: "{{ ansible_architecture }}"
+    docker_compose_path: /usr/local/bin/docker-compose
+  roles:
+    - docker
+
+- hosts: all
+  tasks:
+    - name: Creates directory
+      ansible.builtin.file:
+        path: /root/cs_server/
+        state: directory
+    - name: Copy docker-compose to remote
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'PWD') }}/docker-compose.yml"
+        dest: /root/cs_server/docker-compose.yml
+        mode: '0755'
+        owner: root
+        group: root
+    - name: Bring up docker-compose as a daemon
+      ansible.builtin.shell: docker-compose up -d
+      args:
+        chdir: /root/cs_server

@@ -1,0 +1,32 @@
+---
+ahoyapi: v2
+usage: Setup commands
+commands:
+  up:
+    usage: Setups cs16 server on digital ocean
+    cmd: |
+      doctl compute droplet create \
+        --image ubuntu-20-04-x64 \
+        --size s-2vcpu-4gb-120gb-intel \
+        --region sfo3 \
+        --vpc-uuid 3a7dd666-eb71-465e-997a-659407dea829 \
+        --ssh-keys 41293426 \
+        --wait \
+        cs16server
+
+  env:
+    usage: Saves environment variables to .env file
+    cmd: |
+      test -f .env && rm .env
+      SERVER_IP=$(doctl compute droplet list --format "Name,PublicIPv4" | grep cs16server | awk '{print $2}')
+      echo "SERVER_IP=$SERVER_IP" >> .env
+
+  ssh:
+    usage: SSH into server
+    cmd: |
+      doctl compute ssh cs16server $@
+
+  destroy:
+    usage: Destroy the cs16 server
+    cmd: |
+      doctl compute droplet delete -f cs16server

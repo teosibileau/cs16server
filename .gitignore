@@ -1,0 +1,7 @@
+logs
+logs/*
+.env
+hosts
+.facts
+roles
+.vscode

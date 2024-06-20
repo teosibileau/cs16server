@@ -5,3 +5,25 @@ commands:
     usage: A series of docker commands (experimental)
     imports:
       - .ahoy/docker.ahoy.yml
+
+  do:
+    usage: Digital Ocean commands
+    imports:
+      - .ahoy/do.ahoy.yml
+
+  ansible:
+    usage: Ansible commands
+    imports:
+      - .ahoy/ansible.ahoy.yml
+
+  setup-precommit:
+    usage: Setup pre-commit hooks
+    cmd: |
+      if git config --unset-all core.hooksPath; then \
+        echo "Unset core.hooksPath"; \
+      else \
+        echo "core.hooksPath was not set"; \
+      fi
+      rm -rf .git/hooks
+      poetry run pip install pre-commit
+      poetry run pre-commit install
