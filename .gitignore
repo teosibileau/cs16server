@@ -4,3 +4,4 @@ logs/*
 hosts
 .facts
 roles
+.vscode

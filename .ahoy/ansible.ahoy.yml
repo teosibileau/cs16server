@@ -18,5 +18,5 @@ commands:
     usage: Initial setup
     cmd: |
       ahoy ansible create-hosts-file
-      ansible-playbook -i hosts ./playbooks/docker.yml
+      ansible-playbook -i hosts ./playbooks/counterstrike.yml
       # sleep 5
