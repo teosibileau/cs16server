@@ -1,0 +1,22 @@
+---
+ahoyapi: v2
+commands:
+  roles:
+    usage: Install ansible roles
+    cmd: |
+      ansible-galaxy install -r requirements.yml
+
+  create-hosts-file:
+    usage: Create hosts file
+    cmd: |
+      eval "$(cat .env | xargs)"
+      test -f hosts && rm -rf hosts
+      echo "[cs16server]" > hosts
+      echo "cp ansible_host=$SERVER_IP ansible_user=root ansible_ssh_extra_args='-o StrictHostKeyChecking=no'" >> hosts
+
+  setup:
+    usage: Initial setup
+    cmd: |
+      ahoy ansible create-hosts-file
+      ansible-playbook -i hosts ./playbooks/docker.yml
+      # sleep 5
