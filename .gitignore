@@ -5,3 +5,4 @@ hosts
 .facts
 roles
 .vscode
+.DS_Store
