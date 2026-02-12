@@ -1,32 +1,317 @@
 ---
 ahoyapi: v2
-usage: Setup commands
+usage: Setup commands 🎮
 commands:
+  set-size:
+    usage: Get cheapest droplet size with >=2 CPU and >=4GB RAM
+    cmd: |
+      # Get cheapest size with >=2 vCPUs and >=4096 MB RAM
+      DROPLET_SIZE=$(doctl compute size list --format Slug,VCPUs,Memory,PriceMonthly --no-header | \
+        awk '$2 >= 2 && $3 >= 4096 {print $1, $4}' | \
+        sort -k2 -n | \
+        head -1 | \
+        cut -d' ' -f1)
+
+      # Validate we found a size
+      if [ -z "$DROPLET_SIZE" ]; then
+        echo "❌ Error: Could not find a suitable droplet size" >&2
+        exit 1
+      fi
+
+      # Remove existing DROPLET_SIZE from .env if present
+      if [ -f .env ]; then
+        grep -v "^DROPLET_SIZE=" .env > .env.tmp && mv .env.tmp .env
+      fi
+
+      echo "DROPLET_SIZE=$DROPLET_SIZE" >> .env
+      echo "💾 DROPLET_SIZE=$DROPLET_SIZE"
+
+  set-region:
+    usage: Get first available region and its default VPC
+    cmd: |
+      # Get first available region
+      REGION=$(doctl compute region list --format Slug,Available --no-header | \
+        awk '$2 == "true" {print $1}' | \
+        head -1)
+
+      # Validate we found a region
+      if [ -z "$REGION" ]; then
+        echo "❌ Error: Could not find an available region" >&2
+        exit 1
+      fi
+
+      # Get default VPC for the selected region
+      VPC_UUID=$(doctl vpcs list --format ID,Region,Default --no-header | \
+        awk -v r="$REGION" '$2 == r && $3 == "true" {print $1}')
+
+      # Fallback: get first VPC in region if no default
+      if [ -z "$VPC_UUID" ]; then
+        VPC_UUID=$(doctl vpcs list --format ID,Region --no-header | \
+          awk -v r="$REGION" '$2 == r {print $1; exit}')
+      fi
+
+      # Validate we found a VPC
+      if [ -z "$VPC_UUID" ]; then
+        echo "❌ Error: Could not find a VPC for region $REGION" >&2
+        exit 1
+      fi
+
+      # Remove existing REGION and VPC_UUID from .env if present
+      if [ -f .env ]; then
+        grep -v "^REGION=" .env | grep -v "^VPC_UUID=" > .env.tmp && mv .env.tmp .env
+      fi
+
+      echo "REGION=$REGION" >> .env
+      echo "VPC_UUID=$VPC_UUID" >> .env
+      echo "🌍 REGION=$REGION"
+      echo "🕸️  VPC_UUID=$VPC_UUID"
+
+  set-image:
+    usage: Get latest non-GPU Ubuntu image slug and save to .env
+    cmd: |
+      # Get latest non-GPU Ubuntu image
+      DROPLET_IMAGE=$(doctl compute image list-distribution --format Slug --no-header | \
+        grep -E '^ubuntu-[0-9]{2}-[0-9]{2}-x64$' | \
+        sort -t'-' -k2,2n -k3,3n | \
+        tail -1)
+
+      # Validate we found an image
+      if [ -z "$DROPLET_IMAGE" ]; then
+        echo "❌ Error: Could not find a suitable Ubuntu image" >&2
+        exit 1
+      fi
+
+      # Remove existing DROPLET_IMAGE from .env if present
+      if [ -f .env ]; then
+        grep -v "^DROPLET_IMAGE=" .env > .env.tmp && mv .env.tmp .env
+      fi
+
+      echo "DROPLET_IMAGE=$DROPLET_IMAGE" >> .env
+      echo "🐧 DROPLET_IMAGE=$DROPLET_IMAGE"
+
+  set-ssh-key:
+    usage: Select SSH key from local .ssh directory and ensure it's on DigitalOcean
+    cmd: |
+      # Find local SSH public keys
+      LOCAL_KEYS=$(ls ~/.ssh/*.pub 2>/dev/null)
+
+      if [ -z "$LOCAL_KEYS" ]; then
+        echo "❌ Error: No SSH public keys found in ~/.ssh/" >&2
+        echo "🔧 Please create an SSH key pair first:" >&2
+        echo "   ssh-keygen -t rsa -b 4096 -C 'your_email@example.com'" >&2
+        exit 1
+      fi
+
+      # List local keys with numbers
+      echo "🔐 Choose your SSH weapon:"
+      echo "$LOCAL_KEYS" | nl -w 2 -s '. ' | sed 's/^/  /'
+      echo ""
+
+      # Ask user to select a key
+      KEY_COUNT=$(echo "$LOCAL_KEYS" | wc -l)
+      read -p "👉 Select SSH key [1-$KEY_COUNT]: " SELECTION
+
+      # Validate selection
+      if ! [[ "$SELECTION" =~ ^[0-9]+$ ]] || [ "$SELECTION" -lt 1 ] || [ "$SELECTION" -gt "$KEY_COUNT" ]; then
+        echo "❌ Error: Invalid selection" >&2
+        exit 1
+      fi
+
+      # Get selected key path
+      SELECTED_KEY=$(echo "$LOCAL_KEYS" | sed -n "${SELECTION}p")
+      KEY_NAME=$(basename "$SELECTED_KEY" .pub)
+      echo ""
+      echo "🗝️  Selected: $SELECTED_KEY"
+
+      # Get MD5 fingerprint of selected key (to match DO format)
+      LOCAL_FINGERPRINT=$(ssh-keygen -E md5 -lf "$SELECTED_KEY" | awk '{print $2}' | sed 's/MD5://')
+
+      # Check if this key already exists on DigitalOcean
+      EXISTING_KEY=$(doctl compute ssh-key list --format ID,FingerPrint --no-header | grep "$LOCAL_FINGERPRINT")
+
+      if [ -n "$EXISTING_KEY" ]; then
+        # Key exists, extract ID
+        SSH_KEY_ID=$(echo "$EXISTING_KEY" | awk '{print $1}')
+        echo "✨ Key already exists on DigitalOcean (ID: $SSH_KEY_ID)"
+      else
+        # Key doesn't exist, import it
+        echo ""
+        echo "📤 Uploading key to DigitalOcean..."
+        IMPORT_RESULT=$(doctl compute ssh-key import "$KEY_NAME" --public-key-file "$SELECTED_KEY" --format ID --no-header 2>&1)
+
+        if [ $? -eq 0 ]; then
+          SSH_KEY_ID=$(echo "$IMPORT_RESULT" | tail -1)
+          echo "🚀 Key uploaded successfully! (ID: $SSH_KEY_ID)"
+        else
+          echo "❌ Error: Failed to import SSH key" >&2
+          echo "$IMPORT_RESULT" >&2
+          exit 1
+        fi
+      fi
+
+      # Remove existing SSH_KEY_ID from .env if present
+      if [ -f .env ]; then
+        grep -v "^SSH_KEY_ID=" .env > .env.tmp && mv .env.tmp .env
+      fi
+
+      echo "SSH_KEY_ID=$SSH_KEY_ID" >> .env
+      echo "🔑 SSH_KEY_ID=$SSH_KEY_ID"
+
   up:
     usage: Setups cs16 server on digital ocean
     cmd: |
+      # Validate .env file exists
+      if [ ! -f .env ]; then
+        echo "❌ Error: .env file not found. Run 'ahoy do env' first 🧙‍♂️" >&2
+        exit 1
+      fi
+
+      # Load environment variables from .env
+      eval "$(cat .env | xargs)"
+
+      # Validate all required variables are set
+      if [ -z "$DROPLET_SIZE" ]; then
+        echo "❌ Error: DROPLET_SIZE not set. Run 'ahoy do env' first 🧙‍♂️" >&2
+        exit 1
+      fi
+
+      if [ -z "$REGION" ]; then
+        echo "❌ Error: REGION not set. Run 'ahoy do env' first 🧙‍♂️" >&2
+        exit 1
+      fi
+
+      if [ -z "$VPC_UUID" ]; then
+        echo "❌ Error: VPC_UUID not set. Run 'ahoy do env' first 🧙‍♂️" >&2
+        exit 1
+      fi
+
+      if [ -z "$DROPLET_IMAGE" ]; then
+        echo "❌ Error: DROPLET_IMAGE not set. Run 'ahoy do env' first 🧙‍♂️" >&2
+        exit 1
+      fi
+
+      if [ -z "$SSH_KEY_ID" ]; then
+        echo "❌ Error: SSH_KEY_ID not set. Run 'ahoy do env' first 🧙‍♂️" >&2
+        exit 1
+      fi
+
+      echo ""
+      echo "🎮 PREPARE FOR DEPLOYMENT! 🖥️"
+      echo "═══════════════════════════════════"
+      echo "  🏷️  Name: cs16server"
+      echo "  🖼️  Image: $DROPLET_IMAGE"
+      echo "  💾 Size: $DROPLET_SIZE"
+      echo "  🌍 Region: $REGION"
+      echo "  🕸️  VPC: ${VPC_UUID:0:8}..."
+      echo "  🔑 SSH Key: $SSH_KEY_ID"
+      echo "═══════════════════════════════════"
+      echo ""
+      read -p "❓ Ready to frag? (y/n) " -n 1 -r
+      echo ""
+
+      if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "🛑 Aborted. Maybe next time! 👋"
+        exit 0
+      fi
+
+      echo ""
+      echo "🚀 Launching droplet into the cloud... ⏳"
+      echo ""
+
       doctl compute droplet create \
-        --image ubuntu-20-04-x64 \
-        --size s-2vcpu-4gb-120gb-intel \
-        --region sfo3 \
-        --vpc-uuid 3a7dd666-eb71-465e-997a-659407dea829 \
-        --ssh-keys 41293426 \
+        --image "$DROPLET_IMAGE" \
+        --size "$DROPLET_SIZE" \
+        --region "$REGION" \
+        --vpc-uuid "$VPC_UUID" \
+        --ssh-keys "$SSH_KEY_ID" \
         --wait \
         cs16server
 
-  env:
-    usage: Saves environment variables to .env file
-    cmd: |
-      test -f .env && rm .env
+      echo ""
+      echo "🎉 HEADSHOT! Droplet deployed successfully! 🎯"
+      echo ""
+
+      # Get server IP and add to .env
       SERVER_IP=$(doctl compute droplet list --format "Name,PublicIPv4" | grep cs16server | awk '{print $2}')
-      echo "SERVER_IP=$SERVER_IP" >> .env
+
+      if [ -n "$SERVER_IP" ]; then
+        # Remove existing SERVER_IP from .env if present
+        grep -v "^SERVER_IP=" .env > .env.tmp && mv .env.tmp .env
+        echo "SERVER_IP=$SERVER_IP" >> .env
+        echo "🌐 Server online at: $SERVER_IP"
+        echo "🔥 Time to get your game on! 🎮"
+      else
+        echo "⚠️  Warning: Could not retrieve server IP. Run 'ahoy do env' to fix." >&2
+      fi
+
+  env:
+    usage: Setup all environment variables
+    cmd: |
+      echo "🧙‍♂️ Initiating droplet configuration spell..."
+      echo "══════════════════════════════════════════"
+      echo ""
+
+      # Set size
+      SIZE_OUTPUT=$(ahoy do set-size)
+      echo "  $SIZE_OUTPUT"
+
+      # Set region and VPC
+      echo ""
+      REGION_OUTPUT=$(ahoy do set-region)
+      echo "  $(echo "$REGION_OUTPUT" | head -1)"
+      echo "  $(echo "$REGION_OUTPUT" | tail -1)"
+
+      # Set image
+      echo ""
+      IMAGE_OUTPUT=$(ahoy do set-image)
+      echo "  $IMAGE_OUTPUT"
+
+      # Set SSH key
+      echo ""
+      SSH_KEY_OUTPUT=$(ahoy do set-ssh-key)
+      echo "  $(echo "$SSH_KEY_OUTPUT" | grep "^🔑")"
+
+      # Check if droplet exists and get IP
+      echo ""
+      echo "🔍 Checking for existing droplet..."
+      SERVER_IP=$(doctl compute droplet list --format "Name,PublicIPv4" | grep cs16server | awk '{print $2}')
+
+      if [ -n "$SERVER_IP" ]; then
+        # Remove existing SERVER_IP from .env if present
+        if [ -f .env ]; then
+          grep -v "^SERVER_IP=" .env > .env.tmp && mv .env.tmp .env
+        fi
+        echo "SERVER_IP=$SERVER_IP" >> .env
+        echo "  🌐 Server found at: $SERVER_IP"
+      else
+        echo "  👻 No existing droplet found. IP will be set after creation."
+      fi
+
+      echo ""
+      echo "══════════════════════════════════════════"
+      echo "⚡ Configuration complete! Ready to deploy?"
+      echo "   Run: ahoy do up 🎮"
 
   ssh:
     usage: SSH into server
     cmd: |
+      eval "$(cat .env | xargs)"
+      echo "🔌 Connecting to cs16server... 💻"
       doctl compute ssh cs16server $@
 
   destroy:
     usage: Destroy the cs16 server
     cmd: |
-      doctl compute droplet delete -f cs16server
+      echo "💥 DROPPING THE BOMB on cs16server..."
+      echo "🔥 This will permanently delete your server!"
+      echo ""
+      read -p "❓ Are you sure? (yes/no) " -r
+      echo ""
+
+      if [[ $REPLY == "yes" ]]; then
+        doctl compute droplet delete -f cs16server
+        echo ""
+        echo "💀 Server annihilated! (Hope you backed up your stats 😅)"
+      else
+        echo "🛑 Cancelled. Server lives to fight another day! 🛡️"
+      fi
