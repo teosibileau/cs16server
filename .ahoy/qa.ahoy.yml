@@ -1,0 +1,17 @@
+ahoyapi: v2
+usage: Quality Assurance commands
+commands:
+  setup:
+    usage: Install pre-commit hooks
+    cmd: |
+      if git config --unset-all core.hooksPath; then
+        echo "Unset core.hooksPath"
+      else
+        echo "core.hooksPath was not set"
+      fi
+      rm -rf .git/hooks
+      pre-commit install
+      echo "Pre-commit hooks installed successfully"
+  run:
+    usage: Run pre-commit on all files
+    cmd: pre-commit run --all-files
