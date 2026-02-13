@@ -315,3 +315,10 @@ commands:
       else
         echo "🛑 Cancelled. Server lives to fight another day! 🛡️"
       fi
+
+  logs:
+    usage: View Docker Compose logs on the remote server
+    cmd: |
+      echo "📋 Fetching Docker Compose logs from cs16server..."
+      echo ""
+      doctl compute ssh cs16server --ssh-command "cd /root/cs_server && docker compose logs"
