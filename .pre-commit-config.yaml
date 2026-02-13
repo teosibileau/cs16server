@@ -13,26 +13,7 @@ repos:
       - id: check-merge-conflict
       - id: check-yaml
       - id: check-added-large-files
-  - repo: https://github.com/timothycrosley/isort
-    rev: 5.12.0
-    hooks:
-      - id: isort
-        args: ["--filter-files"]
-  - repo: https://github.com/PyCQA/autoflake
-    rev: v2.0.1
-    hooks:
-      - id: autoflake
-        args: ['--in-place', '--remove-all-unused-imports',
-               '--remove-unused-variable']
-  - repo: https://github.com/psf/black
-    rev: 23.1.0
-    hooks:
-      - id: black
-  - repo: https://github.com/PyCQA/flake8
-    rev: 6.0.0
-    hooks:
-      - id: flake8
-        additional_dependencies: [flake8-docstrings, flake8-typing-imports]
+        exclude: ^.docker/maps/
   - repo: https://github.com/adrienverge/yamllint.git
     rev: v1.17.0
     hooks:
@@ -43,11 +24,6 @@ repos:
     hooks:
       - id: checkov
         args: [-d .]
-  # - repo: https://github.com/Agilicus/pre-commit-hook-k8svalidate.git
-  #   rev: v0.0.8
-  #   hooks:
-  #     - id: k8svalidate
-  #       files: .yaml$
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.2.0
     hooks:

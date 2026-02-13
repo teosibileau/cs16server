@@ -1,7 +1,7 @@
 ---
 services:
   counter:
-    image: cs16ds/server:latest
+    build: ./.docker
     platform: linux/amd64
     environment:
       - MAXPLAYERS=32

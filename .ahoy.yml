@@ -16,14 +16,7 @@ commands:
     imports:
       - .ahoy/ansible.ahoy.yml
 
-  setup-precommit:
-    usage: Setup pre-commit hooks
-    cmd: |
-      if git config --unset-all core.hooksPath; then \
-        echo "Unset core.hooksPath"; \
-      else \
-        echo "core.hooksPath was not set"; \
-      fi
-      rm -rf .git/hooks
-      poetry run pip install pre-commit
-      poetry run pre-commit install
+  qa:
+    usage: Quality Assurance commands
+    imports:
+      - .ahoy/qa.ahoy.yml

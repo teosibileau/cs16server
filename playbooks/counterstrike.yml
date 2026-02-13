@@ -21,6 +21,13 @@
         mode: '0755'
         owner: root
         group: root
+    - name: Copy .docker directory to remote
+      ansible.builtin.copy:
+        src: "{{ lookup('env', 'PWD') }}/.docker/"
+        dest: /root/cs_server/.docker/
+        mode: '0755'
+        owner: root
+        group: root
     - name: Bring up docker-compose as a daemon
       ansible.builtin.shell: docker-compose up -d
       args:
